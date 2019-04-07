@@ -13,10 +13,101 @@ def get_length(datab, pos):
     return intlen
 
 
+def insert_data(rawdecomp):
+    # Pixel Format: 4 Bytes / Channel
+
+    for byte in range(len(rawdecomp)):
+        if rawdecomp[byte] == 2:
+            rawdecomp[byte] = 255
+
+    return rawdecomp
+
+
+def get_ihdr_data(datab):
+    ihdrpos = datab.find(b'IHDR')
+    ihdr = datab[ihdrpos+4:ihdrpos+4+13]
+
+    width = "\t\t\t" + str(int(ihdr[:4].hex(), 16)) + " pixels"
+    height = "\t\t" + str(int(ihdr[4:8].hex(), 16)) + " pixels"
+    colortypei = int(ihdr[9:10].hex(), 16)
+    filtertypei = int(ihdr[11:12].hex(), 16)
+    bitdepthi = int(ihdr[8:9].hex(), 16)
+    compressioni = int(ihdr[10:11].hex(), 16)
+    interlacei = int(ihdr[12:13].hex(), 16)
+
+    bitdepth = "\t\t" + str(bitdepthi)
+    if bitdepthi == 1:
+        bitdepth += " (1 bit per pixel)"
+    elif bitdepthi == 2:
+        bitdepth += " (2 bits per pixel)"
+    elif bitdepthi == 4:
+        bitdepth += " (4 bits per pixel)"
+    elif bitdepthi == 8:
+        if colortypei in [0, 3]:
+            bitdepth += " (8 bits per pixel)"
+        elif colortypei == 4:
+            bitdepth += " (16 bits per pixel)"
+        elif colortypei == 2:
+            bitdepth += " (24 bits per pixel)"
+        elif colortypei == 6:
+            bitdepth += " (32 bits per pixel)"
+    elif bitdepthi == 16:
+        if colortypei in [0, 3]:
+            bitdepth += " (16 bits per pixel)"
+        elif colortypei == 4:
+            bitdepth += " (32 bits per pixel)"
+        elif colortypei == 2:
+            bitdepth += " (48 bits per pixel)"
+        elif colortypei == 6:
+            bitdepth += " (64 bits per pixel)"
+
+    colortype = "\t\t" + str(colortypei)
+    if colortypei == 0:
+        colortype += " (Grayscale) [ 1 channel ]"
+    elif colortypei == 2:
+        colortype += " (Truecolor) [ 3 channels ]"
+    elif colortypei == 3:
+        colortype += " (Indexed) [ 1 channel ]"
+    elif colortypei == 4:
+        colortype += " (Grayscale and Alpha) [ 2 channels ]"
+    elif colortypei == 6:
+        colortype += " (Truecolor and Alpha) [ 4 channels ]"
+
+    compression = "\t" + str(compressioni)
+    if compressioni == 0:
+        compression += " (DEFLATE)"
+    else:
+        compression += " (Unknown)"
+
+    filtertype = "\t\t" + str(filtertypei)
+    if filtertypei == 0:
+        filtertype += " (None)"
+    elif filtertypei == 1:
+        filtertype += " (Sub)"
+    elif filtertypei == 2:
+        filtertype += " (Up)"
+    elif filtertypei == 3:
+        filtertype += " (Average)"
+    elif filtertypei == 4:
+        filtertype += " (Paeth)"
+
+    interlace = "\t" + str(interlacei)
+    if interlacei == 0:
+        interlace += " (None)"
+    elif interlacei == 1:
+        interlace += " (Adam7)"
+
+    print("    -IHDR data: \n        Width: {}\n        Height: {}\n        Bit Depth: {}\n        Color Type: {}\n    "
+          "    Compression Method: {}\n        Filter Method: {}\n        Interlace Method: {}".format(
+                                                                                width, height, bitdepth, colortype,
+                                                                                compression, filtertype,
+                                                                                interlace))
+
+
 def insert(imagepath, message=""):
 
     try:
-        print("\n-Reading image...")
+        print("\n-Reading image:")
         with open(imagepath, "rb") as image:
             data = image.read()
     except Exception as err:
@@ -30,7 +121,9 @@ def insert(imagepath, message=""):
         print("\n- ERROR: Invalid Image. Must be PNG.\n")
         return
 
-    print("-Hidding stuff...")
+    get_ihdr_data(datab)
+
+    print("-Hidding stuff:")
 
     data2 = datab
     idat_chunks = []
@@ -54,40 +147,45 @@ def insert(imagepath, message=""):
 
         oldcrc = datab[pos + 4 + datalen:pos + 8 + datalen].hex()
 
-        print("    -Decompressing IDAT...")
+        print("    -Decompressing IDAT")
         decomp = zlib.decompress(datab[pos + 4:pos + 4 + datalen])
         rawdecomp = bytearray(decomp)
 
-        print("    -Adding information to image...")
-        for r in range(len(rawdecomp)):
-            if rawdecomp[r] == 2:
-                rawdecomp[r] = 255
+        print("    -Adding information to image:")
+        rawdecomp = insert_data(rawdecomp)
 
-        print("    -Compressing new IDAT...")
+        print("    -Compressing new IDAT")
         comp = zlib.compress(rawdecomp)
         comp = bytearray(comp)
 
-        print("    -Computing new data length...")
+        print("    -Computing new IDAT data length:")
         newlen = len(comp)
-        print("      Old length: {} - New length: {}".format(datalen, newlen))
+        print("        Old: {} -> New: {}".format(datalen, newlen))
 
         hexlen = hex(newlen).replace("0x", "")
         while len(hexlen) < 8:
             hexlen = "0" + hexlen
         hexlen = bytearray.fromhex(hexlen)
 
-        datab[pos - 4:pos] = hexlen
-        datab[pos + 4:pos + 4 + newlen] = comp
-        datab[pos + 4 + newlen:] = datab[pos + 4 + datalen:]
+        newdata = datab[:pos-4]
+        newdata += hexlen
+        newdata += bytearray(b'IDAT')
 
-        print("    -Updating CRC...")
-        newcrc = hex(zlib.crc32(datab[pos:pos + 4 + newlen])).replace("0x", '')
-        datab[pos + 4 + newlen:pos + 8 + newlen] = bytearray.fromhex(newcrc)
-        print("      Old CRC: {} - New CRC: {}".format(oldcrc, bytearray.fromhex(newcrc).hex()))
+        end = datab[pos + 4 + datalen:]
+        newdata += comp
+        newdata += end
 
-    print("-Writting new image...")
+        print("    -Computing new CRC-32:")
+        newcrc = hex(zlib.crc32(newdata[pos: pos+4+newlen])).replace("0x", '')
+        newdata[pos + 4 + newlen:pos + 8 + newlen] = bytearray.fromhex(newcrc)
+        print("        Old: {} -> New: {}".format(oldcrc, bytearray.fromhex(newcrc).hex()))
+
+    print("-Writting new image:")
     with open("../bin/hidden.png", "wb") as image:
-        image.write(datab)
+        if 'newdata' not in locals():
+            newdata = datab
+
+        image.write(newdata)
 
     print("\n- Done -\n")
 
@@ -99,12 +197,12 @@ def extract():
 if __name__ == "__main__":
     print("\n - PySteg V0.2 -\n")
 
-    mode = input("Select Mode (i = Insert | e = Extract): ")
-    # mode = "i"
+    # mode = input("Select Mode (i = Insert | e = Extract): ")
+    mode = "i"
 
     if mode == "i":
-        imagepath = input("Path to image: ")
-        # imagepath = "../bin/original.png"
+        # imagepath = input("Path to image: ")
+        imagepath = "../bin/original.png"
         message = "Hidden stuff"
 
         insert(imagepath, message)
