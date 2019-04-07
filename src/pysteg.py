@@ -276,7 +276,7 @@ def insert(inputpath, outputpath, message):
     print("\n- Done -\n")
 
 
-def extract():
+def extract(inputpath, outputpath):
     """Extracts hidden data from a PNG image"""
 
     print("\n- Mode not implemented -\n")
@@ -288,10 +288,12 @@ def show_help():
     print("\n Error: [ Missing Required Arguments! ]\n")
 
     print("Name\n\tPySteg - insert data into PNG images\n")
-    print("Synopsis\n\tpysteg.py inpath outpath datapath\n")
+    print("Synopsis\n\tpysteg.py mode inpath outpath [ datapath ]\n")
     print("Description\n\t"
+          "mode\t\t- '-i' create image\n\t\t\t- '-e' extract data\n\t"
           "inpath\t\t- Path to input image\n\toutpath\t\t- Path to output image\n\tdatapath\t- Path to data")
-    print("\nExample\n\tpython pysteg.py smile.png hidden.png secret.txt\n")
+    print("\nExamples\n\tpython pysteg.py -i smile.png hidden.png secret.txt\n\t"
+          "python pysteg.py -e hidden.png secret.txt\n")
 
 
 def init(args):
@@ -301,14 +303,18 @@ def init(args):
         show_help()
         return
 
-    print("\n - PySteg V0.3 -\n")
+    mode = args[1]
 
-    mode = input("Select Mode (i = Insert | e = Extract): ")
+    print("\n - PySteg V0.3 -")
 
-    if mode == "i":
-        inputpath = args[1]   # Path to input image
-        outputpath = args[2]  # Path to output image
-        datapath = args[3]    # Path to data
+    if mode == "-i":
+        if len(args) < 5:
+            show_help()
+            return
+
+        inputpath = args[2]   # Path to input image
+        outputpath = args[3]  # Path to output image
+        datapath = args[4]    # Path to data
 
         with open(datapath, "rb") as file:
             message = file.read()
@@ -316,8 +322,15 @@ def init(args):
         message = bytearray(message)
 
         insert(inputpath, outputpath, message)
-    elif mode == "e":
-        extract()
+    elif mode == "-e":
+        if len(args) < 4:
+            show_help()
+            return
+
+        inputpath = args[2]   # Path to input image
+        outputpath = args[3]  # Path to extracted data
+
+        extract(inputpath, outputpath)
     else:
         print("\n- Invalid Mode -")
 
