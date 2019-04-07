@@ -282,10 +282,23 @@ def extract():
     print("\n- Mode not implemented -\n")
 
 
-if __name__ == "__main__":
+def show_help():
+    print("\n Error: [ Missing Required Arguments! ]\n")
+
+    print("Name\n\tPySteg\n")
+    print("Synopsis\n\tpysteg.py inpath outpath datapath\n")
+    print("Description\n\t"
+          "inpath\t\t- Path to input image\n\toutpath\t\t- Path to output image\n\tdatapath\t- Path to data")
+    print("\nExample\n\tpython pysteg.py smile.png hidden.png secret.txt\n")
+
+
+def init(args):
+    if len(args) < 4:
+        show_help()
+        return
+
     print("\n - PySteg V0.3 -\n")
 
-    args = sys.argv
     mode = input("Select Mode (i = Insert | e = Extract): ")
 
     if mode == "i":
@@ -303,3 +316,8 @@ if __name__ == "__main__":
         extract()
     else:
         print("\n- Invalid Mode -")
+
+
+if __name__ == "__main__":
+
+    init(sys.argv)
