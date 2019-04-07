@@ -1,8 +1,11 @@
 
+import sys
 import zlib
 
 
 def get_length(datab, pos):
+    """IDAT chunk data lenght in readable form"""
+
     length = datab[pos - 4:pos]
     intlen = 0
     power = 6
@@ -13,33 +16,73 @@ def get_length(datab, pos):
     return intlen
 
 
-def insert_data(rawdecomp, ihdr_data):
+def insert_data(data, rawdecomp, ihdr_data):
+    """LSB Steganography"""
+
+    max_size = len(rawdecomp)
     scansize = int(len(rawdecomp) / ihdr_data[1])  # Bytes per scanline
+    colotype = ihdr_data[3]
     filtertype = 0  # No filter
+    offset = 0  # Where to start inserting data
+
+    if colotype in [4, 6]:
+        raise Exception("Color Type not supported.")
+
+    if type(data) == str:
+        data = bytearray(data, "utf-8")
+    else:
+        data = bytearray(data)
+
+    if len(data) * 8 > max_size:
+        raise Exception("Too much data to add. (Data larger than image)")
+
+    print("        Length of added data: {} Bytes".format(len(data)))
 
     byte = 0
-    while byte < len(rawdecomp):
-        if byte % scansize == 0:
-            rawdecomp[byte] = filtertype
+    databyte = 0
+    while databyte < len(data):
+        if check_filter(byte + offset, scansize, rawdecomp, filtertype):
             byte += 1
             continue
 
-        r = byte
-        g = byte+1
-        b = byte+2
-        alpha = byte+3
+        currbyte = byte + offset
+        for i in range(1, 9):
+            if check_filter(currbyte, scansize, rawdecomp, filtertype):
+                currbyte += 1
 
-        rawdecomp[r] = 255 - rawdecomp[r]
-        rawdecomp[g] = 255 - rawdecomp[g]
-        rawdecomp[b] = 255 - rawdecomp[b]
-        rawdecomp[alpha] = 255
+            bitmask = 2**(9 - i)                                # 10000000 -> 01000000 -> 00100000 -> ...
+            bit = (data[databyte] & bitmask) >> (8 - i)         # Get only desired bit
 
-        byte += 4
+            try:
+                rawdecomp[currbyte] = rawdecomp[currbyte] | bit     # OR the message bit with the current pixel/channel
+            except IndexError:
+                raise Exception("Too much data to add. (Offset Overflow)")
+
+            currbyte += 1
+
+        byte += 8
+        databyte += 1
 
     return rawdecomp
 
 
+def check_filter(position, scansize, rawdecomp, filtertype):
+    """If start of scanline append Filter Type byte"""
+
+    if position % scansize == 0:
+        try:
+            rawdecomp[position] = filtertype
+        except IndexError:
+            raise Exception("Too much data to add. (Offset Overflow)")
+
+        return True
+
+    return False
+
+
 def get_ihdr_data(datab):
+    """Get image's metadata from the IHDR chunk in readable form"""
+
     ihdrpos = datab.find(b'IHDR')
     ihdr = datab[ihdrpos+4:ihdrpos+4+13]
 
@@ -132,10 +175,11 @@ def get_ihdr_data(datab):
                                                                                 width, height, bitdepth, colortype,
                                                                                 compression, filtermethod,
                                                                                 interlace))
-    return widthi, heighti, filtermethodi, bytes(colortypei), pixelsize
+    return widthi, heighti, filtermethodi, colortypei, pixelsize
 
 
-def insert(inputpath, outputpath, message=""):
+def insert(inputpath, outputpath, message):
+    """Inserts user data into a PNG image"""
 
     try:
         filename = inputpath.split("/")[-1]
@@ -183,12 +227,18 @@ def insert(inputpath, outputpath, message=""):
         decomp = zlib.decompress(datab[pos + 4:pos + 4 + datalen])
         rawdecomp = bytearray(decomp)
 
-        print("    -Adding information to image:")
-        rawdecomp = insert_data(rawdecomp, ihdr_data)
+        try:
+            print("    -Adding information to image:")
+            rawdecomp = insert_data(message, rawdecomp, ihdr_data)
+        except Exception as err:
+            print("\nERROR: {}\n".format(err))
+            return
 
         print("    -Compressing new IDAT")
-        comp = zlib.compress(rawdecomp, level=6)
-        comp = bytearray(comp)
+
+        compressor = zlib.compressobj()
+        comp = compressor.compress(rawdecomp)
+        comp += compressor.flush()
 
         print("    -Computing new IDAT data length:")
         newlen = len(comp)
@@ -227,21 +277,26 @@ def insert(inputpath, outputpath, message=""):
 
 
 def extract():
+    """Extracts hidden data from a PNG image"""
+
     print("\n- Mode not implemented -\n")
 
 
 if __name__ == "__main__":
-    print("\n - PySteg V0.2 -\n")
+    print("\n - PySteg V0.3 -\n")
 
-    # mode = input("Select Mode (i = Insert | e = Extract): ")
-    mode = "i"
+    args = sys.argv
+    mode = input("Select Mode (i = Insert | e = Extract): ")
 
     if mode == "i":
-        # inputpath = input("Path to input image: ")
-        # outputpath = input("Path to output image: ")
-        inputpath = "../bin/original.png"
-        outputpath = "../bin/hidden.png"
-        message = "Hidden stuff"
+        inputpath = args[1]   # Path to input image
+        outputpath = args[2]  # Path to output image
+        datapath = args[3]    # Path to data
+
+        with open(datapath, "rb") as file:
+            message = file.read()
+
+        message = bytearray(message)
 
         insert(inputpath, outputpath, message)
     elif mode == "e":
