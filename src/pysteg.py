@@ -283,9 +283,11 @@ def extract():
 
 
 def show_help():
+    """Display Help"""
+
     print("\n Error: [ Missing Required Arguments! ]\n")
 
-    print("Name\n\tPySteg\n")
+    print("Name\n\tPySteg - insert data into PNG images\n")
     print("Synopsis\n\tpysteg.py inpath outpath datapath\n")
     print("Description\n\t"
           "inpath\t\t- Path to input image\n\toutpath\t\t- Path to output image\n\tdatapath\t- Path to data")
@@ -293,6 +295,8 @@ def show_help():
 
 
 def init(args):
+    """Start Application"""
+
     if len(args) < 4:
         show_help()
         return
@@ -319,5 +323,4 @@ def init(args):
 
 
 if __name__ == "__main__":
-
     init(sys.argv)
